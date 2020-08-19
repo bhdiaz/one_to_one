@@ -1,0 +1,8 @@
+options emailsys=smtp emailhost=your.smtpemail.server.com emailport=25;
+
+
+ filename mymail email "your.emailaddress.com_or_edu" subject="test message";
+ data _null_;
+    file mymail;
+    put 'Hello there';
+ run;
