@@ -1,0 +1,183 @@
+NOTE: PROCEDURE PRINTTO ha utilizado (Tiempo de proceso total):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+4                                                           Sistema SAS                        martes, 25 de agosto de 2020 06:23:00
+
+      
+
+344        
+345        
+346        data _null_;
+347        	set params.RTDM_PARM_ESP_FLAGS;
+348        	call symputx(NOMBRE_FLAG,VALOR_FLAG);	
+349        run;
+
+NOTE: There were 2 observations read from the data set PARAMS.RTDM_PARM_ESP_FLAGS.
+NOTE: DATA statement ha utilizado (Tiempo de proceso total):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+      
+
+350        
+351        /******************************************************/
+352        /***   			  T E M P O R A L E S 		 	    ***/
+353        /******************************************************/
+354        /* habeas data TO DO: La tabla no tiene modificaciones*/
+355        proc sql nostimer;
+356        	connect to impala (dsn=cloudera_impala);
+357        	execute by impala (drop table if exists 5033_inteli_mercadeo.temp_esp_habeas_data          );
+358        	execute by impala (
+359        		create table 5033_inteli_mercadeo.temp_esp_habeas_data stored as parquet as
+360        			select
+361        				distinct concat(tipo_identificacion,"-",nro_identificacion) as tidnid,
+362        				1 as marca
+363        			from clientes.habeas_data
+364        			where periodo = (select max(periodo) from clientes.habeas_data)
+365        	);
+366        	execute by impala (compute stats 5033_inteli_mercadeo.esp_habeas_data);
+367        	disconnect from impala;
+368        quit;
+NOTE: PROCEDURE SQL ha utilizado (Tiempo de proceso total):
+      real time           7.52 seconds
+      cpu time            0.08 seconds
+      
+
+369        
+370        /* listas restrcitivas TO DO : La tabal no tiene modificaciones */
+371        proc sql nostimer;
+372        	connect to impala (dsn=cloudera_impala);
+373        	execute by impala (drop table if exists 5033_inteli_mercadeo.temp_esp_listas_restrictivas          );
+374        	execute by impala (
+375        		create table 5033_inteli_mercadeo.temp_esp_listas_restrictivas stored as parquet as
+376        			select
+377        				concat(tipo_identificacion,"-",nro_identificacion) as tidnid,
+378        				1 as marca
+379        			from clientes.listas_restrictivas
+380        			where periodo = (select max(periodo) from clientes.listas_restrictivas)
+381        	);
+382        	execute by impala (compute stats 5033_inteli_mercadeo.esp_listas_restrictivas);
+383        	disconnect from impala;
+384        quit;
+NOTE: PROCEDURE SQL ha utilizado (Tiempo de proceso total):
+      real time           6.14 seconds
+      cpu time            0.08 seconds
+5                                                           Sistema SAS                        martes, 25 de agosto de 2020 06:23:00
+
+      
+
+385        
+386        /* crea temp_fact_saldos para traer los saldos y calculos de saldos  --- en esta tabla se sacan los saldos ??????? ó es
+386      ! marcacion grupo uribe?????  LJVR
+387        TO DO: La tabla activo.fact_saldos no tiene cambios , falta confirmacion gobierno de datos para la tabla
+387      ! referenciales.sbm_ta_productos_tdc */
+388        proc sql nostimer;
+389        	connect to impala(DSN=cloudera_impala);
+390        	execute by impala(drop table if exists 5033_inteli_mercadeo.temp_esp_grupo_uribe);
+391        	execute by impala(
+392        		create table 5033_inteli_mercadeo.temp_esp_grupo_uribe stored as parquet as
+393        			select distinct
+394        				concat(t1.tipo_identificacion,"-",t1.nro_identificacion) as tidnid,
+395        				1 as marca
+396        			from activo.fact_saldos t1
+397        				inner join referenciales.sbm_ta_productos_tdc as b
+398        				on t1.codigo_producto = b.codigo_producto_normal
+399        				where
+400        				t1.periodo = (select max(periodo) from activo.fact_saldos) and
+401        				b.negocio in ('Grupo Uribe')
+402        	);
+ERROR: CLI execute error: [Cloudera][ImpalaODBC] (110) Error while executing a query in Impala: [HY000] : Runtime Error: Query 
+       cc4089000a4afedd:413e4a400000000: 72% Complete (25811 out of 35558)
+
+NOTE: PROC SQL set option NOEXEC and will continue to check the syntax of statements.
+403        	execute by impala (compute stats 5033_inteli_mercadeo.temp_esp_grupo_uribe);
+NOTE: Statement not executed due to NOEXEC option.
+404        	disconnect from impala;
+NOTE: Statement not executed due to NOEXEC option.
+405        quit;
+NOTE: The SAS System stopped processing this step because of errors.
+NOTE: PROCEDURE SQL ha utilizado (Tiempo de proceso total):
+      real time           8:09.45
+      cpu time            6.01 seconds
+      
+406        
+407        
+408        /******************************************************/
+409        /***   		 E S P   C L I E N T E   D A 	 	    ***/
+410        /******************************************************/
+411        /* sbl_contactos */
+
+
+412        proc sql nostimer;
+413        	connect to impala (dsn=cloudera_impala);
+414        	execute by impala (drop table if exists 5033_inteli_mercadeo.esp_clientes_da );
+415        	execute by impala (
+416        		create table 5033_inteli_mercadeo.esp_clientes_da stored as parquet as
+417        			select distinct
+418        				cast("&operacion" as varchar (2)) as operacion,
+419        				cast("&flag" as varchar (2)) as flags,
+420        				a.tidnid,
+421        				case when (ifnull(b.marca,0)+ifnull(c.marca,0)+ifnull(d.marca,0)) <1
+422        					then 'SI' else 'NO' end as estado
+423        			from 5033_INTELI_MERCADEO.rtdm_cliente360 as a
+424        			left join 5033_inteli_mercadeo.temp_esp_habeas_data as b
+425        				on a.tidnid=b.tidnid
+426        			left join 5033_inteli_mercadeo.temp_esp_listas_restrictivas as c
+6                                                           Sistema SAS                        martes, 25 de agosto de 2020 06:23:00
+
+427        				on a.tidnid=c.tidnid			
+428        			left join 5033_inteli_mercadeo.temp_esp_grupo_uribe as d
+429        				on a.tidnid=d.tidnid
+430        	);
+431        	execute by impala (compute stats 5033_inteli_mercadeo.esp_clientes_da);
+432        	disconnect from impala;
+433        quit;
+NOTE: PROCEDURE SQL ha utilizado (Tiempo de proceso total):
+      real time           14.34 seconds
+      cpu time            0.14 seconds
+      
+
+434        
+435        /******************************************************/
+436        /***   		 E S P   P R O D U C T O S   D A  	    ***/
+437        /******************************************************/
+438        /* ACTIVO 360 */
+439        proc sql nostimer;
+440        	connect to impala (dsn=cloudera_impala);
+441        	execute by impala (drop table if exists 5033_inteli_mercadeo.esp_productos_da );
+442        	execute by impala (
+443        		create table 5033_inteli_mercadeo.esp_productos_da stored as parquet as
+444        			select distinct
+445        				cast("&operacion" as varchar (2)) as operacion,
+446        				cast("&flag" as varchar (2)) as flags,
+447        				n_producto,
+448        				codigo_producto,
+449        				codigo_subproducto,
+450        				tidnid,
+451        				tipo_producto_formulario as tipo_producto,
+452        				fecha_carga
+453        			from 5033_inteli_mercadeo.rtdm_activo_productos360
+454        	);
+455        	execute by impala (compute stats 5033_inteli_mercadeo.esp_productos_da);
+456        	disconnect from impala;
+457        quit;
+NOTE: PROCEDURE SQL ha utilizado (Tiempo de proceso total):
+      real time           20.56 seconds
+      cpu time            0.26 seconds
+      
+
+458        
+459        /*borrado tablas temporales*/
+460        proc sql nostimer;
+461        	connect to impala (dsn=cloudera_impala);
+462        	execute by impala (drop table if exists 5033_inteli_mercadeo.temp_esp_grupo_uribe      		purge);
+463        	execute by impala (drop table if exists 5033_inteli_mercadeo.temp_esp_listas_restrictivas   purge);
+464        	execute by impala (drop table if exists 5033_inteli_mercadeo.temp_esp_habeas_data       	purge);
+465        	disconnect from impala;
+466        quit;
+NOTE: PROCEDURE SQL ha utilizado (Tiempo de proceso total):
+      real time           2.50 seconds
+      cpu time            0.06 seconds
+      
+
+467        
+
